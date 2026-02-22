@@ -1,10 +1,19 @@
-
 """
-main.py
-Main Game Loop for Cyber Defense Simulation
-
-Author: Game UI Team
-Description: Connects all modules, runs game loop, handles input
+===========================================================
+PACKET DEFENDER - ULTIMATE CYBER DEFENSE SIMULATION
+===========================================================
+ALL FEATURES INCLUDED:
+- Voice Alerts
+- Wave System + Boss Battles
+- Score + Combo + Achievements
+- World Map + Live Graph + Attack DNA
+- Power-ups
+- AI Threat Predictor (NEW!)
+- Hacker Chat Interceptor (NEW!)
+- Network Heartbeat Monitor (NEW!)
+- Cyber News Ticker (NEW!)
+- Attack Fingerprint (NEW!)
+===========================================================
 """
 
 import pygame
@@ -14,817 +23,635 @@ import math
 from queue import Queue, Empty
 from enum import Enum
 
-# Import our modules
+# Core modules
 try:
     from sprites import PacketSprite, NetworkNode, ParticleSystem, PacketType
-    from ui_components import (
-        HealthBar, CyberButton, StatsPanel, LogPanel,
-        ThreatIndicator, DefenseModeToggle, Theme
-    )
+    from ui_components import (HealthBar, CyberButton, StatsPanel, LogPanel, 
+                               ThreatIndicator, DefenseModeToggle, Theme)
+    print("[OK] Core modules")
 except ImportError as e:
-    print(f"[ERROR] Failed to import modules: {e}")
-    print("Make sure sprites.py and ui_components.py are in the same directory.")
+    print(f"[ERROR] Core: {e}")
     sys.exit(1)
 
+# Voice
+try:
+    from voice_alert import VoiceAlert
+    VOICE = True
+except:
+    VOICE = False
+print(f"[{'OK' if VOICE else 'NO'}] Voice")
 
-# ============================================
-# GAME CONFIGURATION
-# ============================================
+# Enhancements
+try:
+    from game_enhancements import WaveSystem, ScoreSystem, AchievementSystem, EndGameReport
+    ENHANCE = True
+except:
+    ENHANCE = False
+print(f"[{'OK' if ENHANCE else 'NO'}] Enhancements")
+
+# Advanced
+try:
+    from advanced_features import MiniWorldMap, LiveThreatGraph, BossSystem, PowerUpSystem, AttackDNA
+    ADVANCED = True
+except:
+    ADVANCED = False
+print(f"[{'OK' if ADVANCED else 'NO'}] Advanced")
+
+# Unique features
+try:
+    from unique_features import (AIThreatPredictor, HackerChatInterceptor, 
+                                  NetworkHeartbeat, CyberNewsTicker, AttackFingerprint)
+    UNIQUE = True
+except:
+    UNIQUE = False
+print(f"[{'OK' if UNIQUE else 'NO'}] Unique")
+
 
 class Config:
-    """Game configuration constants"""
-    
-    # Window settings
-    SCREEN_WIDTH = 1200
-    SCREEN_HEIGHT = 700
+    WIDTH = 1200
+    HEIGHT = 700
     FPS = 60
-    TITLE = "PACKET DEFENDER - Cyber Defense Simulation"
-    
-    # Game area layout
-    GAME_AREA_X = 250
-    GAME_AREA_Y = 60
-    GAME_AREA_WIDTH = 700
-    GAME_AREA_HEIGHT = 580
-    
-    # Side panel
-    SIDE_PANEL_X = 960
-    SIDE_PANEL_WIDTH = 230
-    
-    # Control panel
-    CONTROL_PANEL_X = 10
-    CONTROL_PANEL_WIDTH = 230
-    
-    # Game settings
-    MAX_HEALTH = 100
-    MAX_PACKETS = 80
-    PACKET_SPAWN_RATE = 0.03  # Probability per frame
-    
-    # Colors
-    BG_COLOR = (10, 15, 25)
-    GRID_COLOR = (25, 35, 55)
+    TITLE = "PACKET DEFENDER - Ultimate Edition"
+    GAME_X, GAME_Y = 250, 80
+    GAME_W, GAME_H = 700, 560
+    SIDE_X, SIDE_W = 960, 235
+    CTRL_X, CTRL_W = 5, 240
+    MAX_HP = 100
+    MAX_PKT = 80
+    BG = (8, 12, 20)
+    GRID = (20, 30, 45)
 
 
-# ============================================
-# GAME STATE
-# ============================================
-
-class GameState(Enum):
-    """Possible game states"""
-    RUNNING = "running"
-    PAUSED = "paused"
-    GAME_OVER = "game_over"
+class State(Enum):
+    RUN = 1
+    PAUSE = 2
+    OVER = 3
+    BOSS = 4
 
 
-# ============================================
-# MAIN GAME CLASS
-# ============================================
-
-class CyberDefenseGame:
-    """
-    Main game class that manages everything.
-    
-    Features:
-    - Connects with packet capture module via queue
-    - Connects with logging module via callback
-    - Connects with defense module for blocking
-    - Full game loop with proper error handling
-    """
-    
-    def __init__(self, packet_queue=None, log_callback=None, block_callback=None):
-        """
-        Initialize the game.
+class Game:
+    def __init__(self):
+        pygame.init()
+        self.screen = pygame.display.set_mode((Config.WIDTH, Config.HEIGHT))
+        pygame.display.set_caption(Config.TITLE)
+        self.clock = pygame.time.Clock()
         
-        Args:
-            packet_queue: Queue to receive packets from sniffer (optional)
-            log_callback: Function to send logs to logger (optional)
-            block_callback: Function to call defense module (optional)
-        """
-        # ---- Initialize Pygame ----
-        try:
-            pygame.init()
-            pygame.display.set_caption(Config.TITLE)
-            self.screen = pygame.display.set_mode(
-                (Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT)
-            )
-            self.clock = pygame.time.Clock()
-            print("[OK] Pygame initialized successfully")
-        except pygame.error as e:
-            print(f"[FATAL] Pygame initialization failed: {e}")
-            sys.exit(1)
-        
-        # ---- External Connections ----
-        self.packet_queue = packet_queue if packet_queue else Queue()
-        self.log_callback = log_callback if log_callback else self._default_log
-        self.block_callback = block_callback if block_callback else self._default_block
-        
-        # ---- Game State ----
-        self.state = GameState.RUNNING
+        self.state = State.RUN
         self.running = True
-        self.game_time = 0
-        
-        # ---- Game Data ----
-        self.network_health = Config.MAX_HEALTH
-        self.packets_processed = 0
-        self.packets_blocked = 0
-        self.threat_level = 0
-        self.defense_mode = "MANUAL"
+        self.time = 0
+        self.hp = Config.MAX_HP
+        self.wave_hp = Config.MAX_HP
+        self.pkts = 0
+        self.blocked = 0
+        self.threat = 0
+        self.mode = "MANUAL"
         self.blocked_ips = set()
         
-        # ---- Sprite Groups ----
-        self.packet_sprites = pygame.sprite.Group()
-        self.node_sprites = pygame.sprite.Group()
+        self.packets = pygame.sprite.Group()
+        self.nodes = pygame.sprite.Group()
+        self.particles = ParticleSystem()
         
-        # ---- Effects ----
-        self.particle_system = ParticleSystem()
+        self.fonts = {
+            'L': pygame.font.Font(None, 48),
+            'M': pygame.font.Font(None, 28),
+            'S': pygame.font.Font(None, 20),
+            'T': pygame.font.Font(None, 16)
+        }
         
-        # ---- Initialize Components ----
+        self.popup_ach = None
+        self.popup_ach_t = 0
+        self.popup_pwr = None
+        self.popup_pwr_t = 0
+        self.combo_t = 0
+        self.combo_v = 0
+        self.boss_warn = 0
+        
+        self._init_systems()
         self._init_nodes()
         self._init_ui()
+        self._init_unique()
         
-        print("[OK] Game initialized successfully")
-        self.log_callback("System initialized", "success")
+        if self.voice:
+            self.voice.alert_game_start()
+        if self.waves:
+            self.waves.start_game()
+        
+        print("[OK] Game ready!")
     
-    def _default_log(self, message, log_type="info"):
-        """Default logging when no external logger"""
-        print(f"[LOG/{log_type.upper()}] {message}")
-        # Also add to internal log panel
-        if hasattr(self, 'log_panel'):
-            self.log_panel.add_log(message, log_type)
+    def _init_systems(self):
+        self.voice = VoiceAlert() if VOICE else None
+        
+        if ENHANCE:
+            self.waves = WaveSystem()
+            self.waves.on_wave_start = self._wave_start
+            self.waves.on_wave_complete = self._wave_end
+            self.score = ScoreSystem()
+            self.score.on_combo_change = self._combo
+            self.achieve = AchievementSystem()
+            self.achieve.on_achievement_unlock = self._ach
+            self.report = EndGameReport()
+        else:
+            self.waves = self.score = self.achieve = self.report = None
+        
+        if ADVANCED:
+            self.boss = BossSystem()
+            self.boss.on_boss_spawn = self._boss_spawn
+            self.boss.on_boss_defeated = self._boss_dead
+            self.boss.on_boss_attack = self._boss_atk
+            self.powerups = PowerUpSystem()
+            self.powerups.on_powerup_collect = self._pwr
+            self.worldmap = MiniWorldMap(Config.CTRL_X, 430, Config.CTRL_W, 100)
+            self.graph = LiveThreatGraph(Config.SIDE_X, 440, Config.SIDE_W, 80)
+            self.dna = AttackDNA(Config.SIDE_X, 530, Config.SIDE_W, 70)
+        else:
+            self.boss = self.powerups = self.worldmap = self.graph = self.dna = None
     
-    def _default_block(self, ip):
-        """Default block action when no external defense module"""
-        print(f"[BLOCK] IP blocked: {ip}")
-        self.blocked_ips.add(ip)
-    
-    # ============================================
-    # INITIALIZATION
-    # ============================================
+    def _init_unique(self):
+        if UNIQUE:
+            self.ai_pred = AIThreatPredictor(Config.CTRL_X, 540, Config.CTRL_W, 105)
+            self.hacker_chat = HackerChatInterceptor(Config.SIDE_X, 610, Config.SIDE_W, 85)
+            self.heartbeat = NetworkHeartbeat(Config.GAME_X + 420, Config.GAME_Y + 5, 200, 50)
+            self.news = CyberNewsTicker(0, Config.HEIGHT - 22, Config.WIDTH, 22)
+            self.fingerprint = AttackFingerprint(Config.GAME_X + Config.GAME_W - 160, Config.GAME_Y + Config.GAME_H - 110, 155, 105)
+        else:
+            self.ai_pred = self.hacker_chat = self.heartbeat = self.news = self.fingerprint = None
     
     def _init_nodes(self):
-        """Initialize network topology"""
-        try:
-            center_x = Config.GAME_AREA_X + Config.GAME_AREA_WIDTH // 2
-            center_y = Config.GAME_AREA_Y + Config.GAME_AREA_HEIGHT // 2
-            
-            # Main server (target)
-            self.main_server = NetworkNode(
-                center_x + 50, center_y,
-                NetworkNode.SERVER, "MAIN-SERVER"
-            )
-            self.node_sprites.add(self.main_server)
-            
-            # Firewall
-            self.firewall = NetworkNode(
-                center_x - 100, center_y,
-                NetworkNode.FIREWALL, "FIREWALL"
-            )
-            self.node_sprites.add(self.firewall)
-            
-            # Router (packet spawn point)
-            self.router = NetworkNode(
-                Config.GAME_AREA_X + 80, center_y,
-                NetworkNode.ROUTER, "ROUTER"
-            )
-            self.node_sprites.add(self.router)
-            
-            # Workstations
-            workstation_positions = [
-                (center_x + 180, center_y - 120),
-                (center_x + 180, center_y + 120),
-                (center_x + 100, center_y - 200),
-                (center_x + 100, center_y + 200),
-            ]
-            
-            self.workstations = []
-            for i, pos in enumerate(workstation_positions):
-                ws = NetworkNode(pos[0], pos[1], NetworkNode.WORKSTATION, f"WS-0{i+1}")
-                self.node_sprites.add(ws)
-                self.workstations.append(ws)
-            
-            print(f"[OK] Network topology initialized with {len(self.node_sprites)} nodes")
-            
-        except Exception as e:
-            print(f"[ERROR] Node initialization failed: {e}")
+        cx = Config.GAME_X + Config.GAME_W // 2
+        cy = Config.GAME_Y + Config.GAME_H // 2
+        
+        self.server = NetworkNode(cx + 50, cy, NetworkNode.SERVER, "SERVER")
+        self.nodes.add(self.server)
+        self.fw = NetworkNode(cx - 100, cy, NetworkNode.FIREWALL, "FIREWALL")
+        self.nodes.add(self.fw)
+        self.router = NetworkNode(Config.GAME_X + 80, cy, NetworkNode.ROUTER, "ROUTER")
+        self.nodes.add(self.router)
+        
+        self.ws = []
+        for i, p in enumerate([(cx+180, cy-100), (cx+180, cy+100), (cx+100, cy-180), (cx+100, cy+180)]):
+            w = NetworkNode(p[0], p[1], NetworkNode.WORKSTATION, f"WS{i+1}")
+            self.nodes.add(w)
+            self.ws.append(w)
     
     def _init_ui(self):
-        """Initialize all UI components"""
-        try:
-            # ---- Health Bar ----
-            self.health_bar = HealthBar(
-                Config.GAME_AREA_X + 20,
-                Config.GAME_AREA_Y + 20,
-                200, 22,
-                Config.MAX_HEALTH,
-                "NETWORK HEALTH"
-            )
-            
-            # ---- Threat Indicator ----
-            self.threat_indicator = ThreatIndicator(
-                Config.GAME_AREA_X + 250,
-                Config.GAME_AREA_Y + 10,
-                140, 45
-            )
-            
-            # ---- Defense Mode Toggle ----
-            self.defense_toggle = DefenseModeToggle(
-                Config.CONTROL_PANEL_X + 10,
-                70,
-                Config.CONTROL_PANEL_WIDTH - 20,
-                45,
-                self._on_defense_mode_change
-            )
-            
-            # ---- Control Buttons ----
-            self.buttons = []
-            button_configs = [
-                ("BLOCK THREATS", Theme.NEON_RED, self._action_block_threats),
-                ("HEAL NETWORK", Theme.NEON_BLUE, self._action_heal_network),
-                ("CLEAR ALL", Theme.NEON_ORANGE, self._action_clear_all),
-                ("PAUSE GAME", Theme.NEON_YELLOW, self._action_toggle_pause),
-            ]
-            
-            for i, (text, color, callback) in enumerate(button_configs):
-                btn = CyberButton(
-                    Config.CONTROL_PANEL_X + 10,
-                    130 + i * 50,
-                    Config.CONTROL_PANEL_WIDTH - 20,
-                    40,
-                    text, color, callback
-                )
-                self.buttons.append(btn)
-            
-            # ---- Stats Panel ----
-            self.stats_panel = StatsPanel(
-                Config.SIDE_PANEL_X,
-                Config.GAME_AREA_Y,
-                Config.SIDE_PANEL_WIDTH,
-                180,
-                "NETWORK STATS"
-            )
-            
-            # ---- Log Panel ----
-            self.log_panel = LogPanel(
-                Config.SIDE_PANEL_X,
-                Config.GAME_AREA_Y + 200,
-                Config.SIDE_PANEL_WIDTH,
-                180,
-                "EVENT LOG"
-            )
-            
-            print("[OK] UI components initialized")
-            
-        except Exception as e:
-            print(f"[ERROR] UI initialization failed: {e}")
-    
-    # ============================================
-    # CALLBACKS & ACTIONS
-    # ============================================
-    
-    def _on_defense_mode_change(self, is_auto):
-        """Called when defense mode is toggled"""
-        self.defense_mode = "AUTO" if is_auto else "MANUAL"
-        status = "activated" if is_auto else "deactivated"
-        self.log_callback(f"Auto-defense {status}", "success" if is_auto else "warning")
-    
-    def _action_block_threats(self):
-        """Block all visible threats"""
-        blocked = 0
-        for packet in self.packet_sprites:
-            if packet.packet_type in [PacketType.SUSPICIOUS, PacketType.MALICIOUS]:
-                if not packet.is_blocked:
-                    packet.block()
-                    self.packets_blocked += 1
-                    blocked += 1
-                    self.particle_system.emit_block_effect(packet.x, packet.y)
-                    self.block_callback(packet.source_ip)
+        self.hp_bar = HealthBar(Config.GAME_X + 15, Config.GAME_Y + 8, 180, 20, Config.MAX_HP, "HEALTH")
+        self.threat_ind = ThreatIndicator(Config.GAME_X + 210, Config.GAME_Y + 3, 120, 40)
+        self.def_toggle = DefenseModeToggle(Config.CTRL_X + 5, 85, Config.CTRL_W - 10, 40, self._mode_change)
         
-        if blocked > 0:
-            self.log_callback(f"Blocked {blocked} threats", "danger")
-    
-    def _action_heal_network(self):
-        """Heal the network"""
-        heal_amount = 25
-        old_health = self.network_health
-        self.network_health = min(Config.MAX_HEALTH, self.network_health + heal_amount)
+        self.btns = []
+        for i, (t, c, f) in enumerate([
+            ("BLOCK [Q]", Theme.NEON_RED, self._act_block),
+            ("HEAL [E]", Theme.NEON_BLUE, self._act_heal),
+            ("CLEAR [C]", Theme.NEON_ORANGE, self._act_clear),
+            ("PAUSE", Theme.NEON_YELLOW, self._act_pause)
+        ]):
+            self.btns.append(CyberButton(Config.CTRL_X + 5, 140 + i * 45, Config.CTRL_W - 10, 38, t, c, f))
         
-        if self.network_health > old_health:
-            self.log_callback(f"Network healed +{heal_amount} HP", "success")
+        self.stats = StatsPanel(Config.SIDE_X, Config.GAME_Y, Config.SIDE_W, 160, "STATS")
+        self.log = LogPanel(Config.SIDE_X, Config.GAME_Y + 170, Config.SIDE_W, 160, "LOG")
     
-    def _action_clear_all(self):
-        """Clear all packets from screen"""
-        count = len(self.packet_sprites)
-        for packet in list(self.packet_sprites):
-            self.particle_system.emit_block_effect(packet.x, packet.y)
-            packet.kill()
+    def _log(self, msg, typ="info"):
+        print(f"[{typ.upper()}] {msg}")
+        self.log.add_log(msg, typ)
+    
+    # Callbacks
+    def _wave_start(self, n, cfg):
+        self.wave_hp = self.hp
+        self._log(f"Wave {n}!", "warning")
+        if self.voice: self.voice.alert_wave_start(n)
+        if self.hacker_chat: self.hacker_chat.trigger_message('boss' if cfg.get('boss_wave') else None)
+        if self.news: self.news.add_breaking_news(f"Wave {n} attack detected on network")
+        if cfg and cfg.get('boss_wave'):
+            self.boss_warn = 150
+            if self.boss:
+                cx, cy = Config.GAME_X + Config.GAME_W//2, Config.GAME_Y + Config.GAME_H//2
+                self.boss.spawn_boss(n, Config.GAME_X + 100, cy, cx, cy)
+    
+    def _wave_end(self, n):
+        self._log(f"Wave {n} done!", "success")
+        if self.voice: self.voice.alert_wave_complete(n)
+        if self.score: self.score.add_wave_complete_bonus(n, self.hp >= self.wave_hp)
+    
+    def _combo(self, c):
+        self.combo_v, self.combo_t = c, 50
+        if c >= 5 and self.voice: self.voice.alert_combo(c)
+    
+    def _ach(self, a):
+        self.popup_ach, self.popup_ach_t = a, 150
+        self._log(f"🏆 {a.name}!", "success")
+        if self.voice: self.voice.alert_achievement(a.name)
+    
+    def _mode_change(self, auto):
+        self.mode = "AUTO" if auto else "MANUAL"
+        self._log(f"Mode: {self.mode}", "success" if auto else "warning")
+        if self.voice: self.voice.alert_auto_defense(auto)
+    
+    def _boss_spawn(self, b):
+        self.state = State.BOSS
+        self._log(f"BOSS: {b.data['name']}!", "danger")
+    
+    def _boss_dead(self, b):
+        self.state = State.RUN
+        self._log("BOSS DEFEATED! +500", "success")
+        if self.score: self.score.score += 500
+        if self.voice: self.voice.speak("Boss defeated")
+    
+    def _boss_atk(self, b):
+        for _ in range(3):
+            self._spawn(f"{random.randint(1,255)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,255)}", ptype=PacketType.MALICIOUS)
+    
+    def _pwr(self, p):
+        self.popup_pwr, self.popup_pwr_t = p.data['name'], 100
+        self._log(f"⚡ {p.data['name']}!", "success")
+        if p.power_type == 'heal': self.hp = min(Config.MAX_HP, self.hp + 25)
+        elif p.power_type == 'nuke':
+            for pkt in list(self.packets):
+                if pkt.packet_type == PacketType.MALICIOUS:
+                    pkt.block()
+                    self.blocked += 1
+    
+    # Actions
+    def _act_block(self):
+        cnt = 0
+        for p in self.packets:
+            if p.packet_type in [PacketType.SUSPICIOUS, PacketType.MALICIOUS] and not p.is_blocked:
+                self._block(p)
+                cnt += 1
+        if cnt:
+            self._log(f"Blocked {cnt}", "danger")
+            if self.voice: self.voice.alert_ip_blocked()
+        if self.boss and self.boss.has_boss():
+            self.boss.damage_boss(10)
+    
+    def _block(self, p):
+        p.block()
+        self.blocked += 1
+        self.particles.emit_block_effect(p.x, p.y)
+        self.blocked_ips.add(p.source_ip)
         
-        self.threat_level = 0
-        self.log_callback(f"Cleared {count} packets", "info")
-    
-    def _action_toggle_pause(self):
-        """Toggle pause state"""
-        if self.state == GameState.RUNNING:
-            self.state = GameState.PAUSED
-            self.log_callback("Game PAUSED", "warning")
-        else:
-            self.state = GameState.RUNNING
-            self.log_callback("Game RESUMED", "info")
-    
-    # ============================================
-    # PACKET MANAGEMENT
-    # ============================================
-    
-    def _process_external_packets(self):
-        """Process packets from external queue (packet sniffer)"""
-        try:
-            while True:
-                data = self.packet_queue.get_nowait()
-                
-                if isinstance(data, dict):
-                    self._spawn_packet(
-                        source_ip=data.get('src', '0.0.0.0'),
-                        dest_ip=data.get('dst', '0.0.0.0'),
-                        protocol=data.get('proto', 'TCP'),
-                        packet_type=data.get('type')
-                    )
-                elif isinstance(data, str):
-                    self._spawn_packet(source_ip=data)
-                    
-        except Empty:
-            pass
-        except Exception as e:
-            print(f"[ERROR] Processing external packet failed: {e}")
-    
-    def _spawn_packet(self, source_ip="0.0.0.0", dest_ip="0.0.0.0", 
-                      protocol="TCP", packet_type=None):
-        """Spawn a new packet sprite"""
-        try:
-            # Check limit
-            if len(self.packet_sprites) >= Config.MAX_PACKETS:
-                return
-            
-            # Check if IP is blocked
-            if source_ip in self.blocked_ips:
-                return
-            
-            # Determine packet type if not specified
-            if packet_type is None:
-                packet_type = self._classify_packet(source_ip)
-            elif isinstance(packet_type, str):
-                type_map = {
-                    'safe': PacketType.SAFE,
-                    'suspicious': PacketType.SUSPICIOUS,
-                    'malicious': PacketType.MALICIOUS,
-                    'blocked': PacketType.BLOCKED
-                }
-                packet_type = type_map.get(packet_type.lower(), PacketType.SAFE)
-            
-            # Create packet from router to server
-            packet = PacketSprite(
-                self.router.x, self.router.y,
-                self.main_server.x, self.main_server.y,
-                packet_type,
-                source_ip, dest_ip, protocol
-            )
-            
-            self.packet_sprites.add(packet)
-            self.packets_processed += 1
-            
-            # Auto-defense
-            if self.defense_mode == "AUTO" and packet_type == PacketType.MALICIOUS:
-                packet.block()
-                self.packets_blocked += 1
-                self.block_callback(source_ip)
-                self.log_callback(f"Auto-blocked: {source_ip[:15]}", "danger")
-                
-        except Exception as e:
-            print(f"[ERROR] Packet spawn failed: {e}")
-    
-    def _classify_packet(self, source_ip):
-        """Simulate packet classification (threat detection)"""
-        # This simulates threat intel - in real integration, use API
-        if source_ip.startswith("10.") or source_ip.startswith("192.168."):
-            weights = [0.85, 0.12, 0.03]  # Mostly safe
-        else:
-            weights = [0.50, 0.30, 0.20]  # More suspicious
+        if self.worldmap: self.worldmap.add_attack()
+        if self.dna: self.dna.add_attack(p.packet_type.value if hasattr(p.packet_type, 'value') else 'safe')
+        if self.fingerprint: self.fingerprint.analyze_attacker(p.source_ip)
+        if self.hacker_chat: self.hacker_chat.trigger_message('blocked')
+        if self.ai_pred: self.ai_pred.add_attack(random.choice(['DDoS', 'SYN Flood', 'Port Scan', 'Malware']))
         
-        return random.choices(
-            [PacketType.SAFE, PacketType.SUSPICIOUS, PacketType.MALICIOUS],
-            weights=weights
-        )[0]
+        if self.score:
+            pts = self.score.add_block_score(p.packet_type.value if hasattr(p.packet_type, 'value') else 'safe')
+            if self.powerups and self.powerups.has_effect('double_score'):
+                self.score.score += pts
+            if self.achieve:
+                s = self.score.get_stats()
+                self.achieve.check_block_achievements(s['total_blocked'])
+                self.achieve.check_score_achievements(s['score'])
     
-    def _spawn_demo_packet(self):
-        """Spawn random packet for demo/testing"""
-        if random.random() < Config.PACKET_SPAWN_RATE:
-            ip = f"{random.randint(1,255)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,255)}"
-            self._spawn_packet(source_ip=ip)
+    def _act_heal(self):
+        if self.hp < Config.MAX_HP:
+            self.hp = min(Config.MAX_HP, self.hp + 25)
+            self._log("+25 HP", "success")
     
-    # ============================================
-    # GAME LOGIC
-    # ============================================
+    def _act_clear(self):
+        cnt = len(self.packets)
+        for p in list(self.packets):
+            self.particles.emit_block_effect(p.x, p.y)
+            p.kill()
+        self.threat = 0
+        self._log(f"Cleared {cnt}", "info")
     
-    def _update_game_logic(self, dt):
-        """Update game state"""
-        if self.state != GameState.RUNNING:
+    def _act_pause(self):
+        if self.state in [State.RUN, State.BOSS]:
+            self.state = State.PAUSE
+        elif self.state == State.PAUSE:
+            self.state = State.RUN
+    
+    def _spawn(self, ip="0.0.0.0", ptype=None):
+        if len(self.packets) >= Config.MAX_PKT or ip in self.blocked_ips:
             return
         
-        self.game_time += dt
+        if ptype is None:
+            if self.waves:
+                mc = self.waves.get_malicious_chance()
+                w = [1-mc, mc*0.4, mc*0.6]
+            else:
+                w = [0.6, 0.25, 0.15]
+            ptype = random.choices([PacketType.SAFE, PacketType.SUSPICIOUS, PacketType.MALICIOUS], w)[0]
         
-        # Process external packets
-        self._process_external_packets()
+        p = PacketSprite(self.router.x, self.router.y, self.server.x, self.server.y, ptype, ip)
+        self.packets.add(p)
+        self.pkts += 1
         
-        # Spawn demo packets (remove this in production if using real packets)
-        self._spawn_demo_packet()
-        
-        # Update sprites
-        self.packet_sprites.update()
-        self.node_sprites.update()
-        
-        # Check packet arrivals
-        self._check_packet_arrivals()
-        
-        # Update threat level
-        self._update_threat_level()
-        
-        # Update particles
-        self.particle_system.update()
-        
-        # Check game over
-        if self.network_health <= 0:
-            self.state = GameState.GAME_OVER
-            self.log_callback("NETWORK COMPROMISED!", "danger")
+        if self.mode == "AUTO" and ptype == PacketType.MALICIOUS:
+            self._block(p)
+        if self.powerups and self.powerups.has_effect('rapid_fire') and ptype == PacketType.MALICIOUS:
+            self._block(p)
     
-    def _check_packet_arrivals(self):
-        """Handle packets that reached their target"""
-        for packet in list(self.packet_sprites):
-            if packet.reached_target and not packet.is_blocked:
-                # Apply damage
-                damage = packet.get_damage()
-                if damage > 0:
-                    self.network_health -= damage
-                    self.particle_system.emit_hit_effect(packet.x, packet.y)
-                    
-                    if packet.packet_type == PacketType.MALICIOUS:
-                        self.log_callback("MALICIOUS packet hit server!", "danger")
-                
-                packet.kill()
-            elif packet.is_blocked:
-                if packet.alpha <= 0:
-                    packet.kill()
+    def _update(self, dt):
+        if self.state in [State.PAUSE, State.OVER]:
+            return
+        
+        self.time += dt
+        
+        if self.waves:
+            ws = self.waves.update()
+            if ws.get('in_break') and not (self.boss and self.boss.has_boss()):
+                if random.random() < 0.01:
+                    self._spawn(f"192.168.1.{random.randint(1,254)}")
+        
+        if self.score: self.score.update()
+        if self.worldmap: self.worldmap.update()
+        if self.graph: self.graph.add_point(self.threat)
+        if self.dna: self.dna.update()
+        if self.boss: self.boss.update()
+        if self.powerups: self.powerups.update(Config.GAME_X, Config.GAME_Y, Config.GAME_W, Config.GAME_H)
+        if self.ai_pred: self.ai_pred.update()
+        if self.hacker_chat: self.hacker_chat.update()
+        if self.heartbeat: self.heartbeat.update(self.hp)
+        if self.news: self.news.update()
+        if self.fingerprint: self.fingerprint.update()
+        
+        # Spawn packets
+        rate = self.waves.get_spawn_rate() if self.waves else 0.03
+        if random.random() < rate:
+            self._spawn(f"{random.randint(1,255)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,255)}")
+        
+        self.packets.update()
+        self.nodes.update()
+        
+        # Check arrivals
+        for p in list(self.packets):
+            if p.reached_target and not p.is_blocked:
+                if self.powerups and self.powerups.has_effect('shield'):
+                    p.kill()
+                    continue
+                dmg = p.get_damage()
+                if dmg > 0:
+                    self.hp -= dmg
+                    self.particles.emit_hit_effect(p.x, p.y)
+                    if self.hacker_chat: self.hacker_chat.trigger_message('damage')
+                    if self.hp < 30 and self.voice and not hasattr(self, '_warned'):
+                        self.voice.alert_health_low()
+                        self._warned = True
+                p.kill()
+            elif p.is_blocked and p.alpha <= 0:
+                p.kill()
+        
+        # Threat level
+        mal = sum(1 for p in self.packets if p.packet_type == PacketType.MALICIOUS)
+        sus = sum(1 for p in self.packets if p.packet_type == PacketType.SUSPICIOUS)
+        tgt = min(100, mal * 20 + sus * 8)
+        self.threat += (tgt - self.threat) * 0.1
+        
+        if self.threat >= 70 and self.voice and not hasattr(self, '_crit'):
+            self.voice.alert_critical()
+            self._crit = True
+        
+        self.particles.update()
+        
+        # Popups
+        if self.popup_ach_t > 0: self.popup_ach_t -= 1
+        if self.popup_pwr_t > 0: self.popup_pwr_t -= 1
+        if self.combo_t > 0: self.combo_t -= 1
+        if self.boss_warn > 0: self.boss_warn -= 1
+        
+        # Game over
+        if self.hp <= 0:
+            self.state = State.OVER
+            self._log("GAME OVER!", "danger")
+            if self.voice: self.voice.alert_game_over()
+            if self.report and self.score and self.achieve:
+                self.report.generate(
+                    {'game_time': self.time, 'health': self.hp, 'packets_processed': self.pkts},
+                    self.score.get_stats(),
+                    {'waves_completed': self.waves.waves_completed if self.waves else 0, 'current_wave': self.waves.current_wave if self.waves else 0},
+                    self.achieve.get_unlocked()
+                )
+                self.report.print_report()
     
-    def _update_threat_level(self):
-        """Calculate current threat level"""
-        malicious = sum(1 for p in self.packet_sprites if p.packet_type == PacketType.MALICIOUS)
-        suspicious = sum(1 for p in self.packet_sprites if p.packet_type == PacketType.SUSPICIOUS)
+    def _draw(self):
+        self.screen.fill(Config.BG)
         
-        target = min(100, malicious * 20 + suspicious * 8)
-        self.threat_level += (target - self.threat_level) * 0.1
-    
-    # ============================================
-    # RENDERING
-    # ============================================
-    
-    def _draw_background(self):
-        """Draw game background and grid"""
-        self.screen.fill(Config.BG_COLOR)
+        # Grid
+        for x in range(Config.GAME_X, Config.GAME_X + Config.GAME_W, 40):
+            pygame.draw.line(self.screen, Config.GRID, (x, Config.GAME_Y), (x, Config.GAME_Y + Config.GAME_H))
+        for y in range(Config.GAME_Y, Config.GAME_Y + Config.GAME_H, 40):
+            pygame.draw.line(self.screen, Config.GRID, (Config.GAME_X, y), (Config.GAME_X + Config.GAME_W, y))
         
-        # Draw grid in game area
-        for x in range(Config.GAME_AREA_X, Config.GAME_AREA_X + Config.GAME_AREA_WIDTH, 40):
-            pygame.draw.line(
-                self.screen, Config.GRID_COLOR,
-                (x, Config.GAME_AREA_Y),
-                (x, Config.GAME_AREA_Y + Config.GAME_AREA_HEIGHT)
-            )
+        # Game border
+        bc = (255, 50, 50) if self.state == State.BOSS else Theme.NEON_BLUE
+        pygame.draw.rect(self.screen, bc, (Config.GAME_X, Config.GAME_Y, Config.GAME_W, Config.GAME_H), 2)
         
-        for y in range(Config.GAME_AREA_Y, Config.GAME_AREA_Y + Config.GAME_AREA_HEIGHT, 40):
-            pygame.draw.line(
-                self.screen, Config.GRID_COLOR,
-                (Config.GAME_AREA_X, y),
-                (Config.GAME_AREA_X + Config.GAME_AREA_WIDTH, y)
-            )
-    
-    def _draw_game_area(self):
-        """Draw main game area"""
-        # Border
-        game_rect = pygame.Rect(
-            Config.GAME_AREA_X, Config.GAME_AREA_Y,
-            Config.GAME_AREA_WIDTH, Config.GAME_AREA_HEIGHT
-        )
-        pygame.draw.rect(self.screen, Theme.NEON_BLUE, game_rect, 2)
+        # Connections
+        pygame.draw.line(self.screen, (40, 60, 90), (self.router.x, self.router.y), (self.fw.x, self.fw.y), 2)
+        pygame.draw.line(self.screen, (40, 60, 90), (self.fw.x, self.fw.y), (self.server.x, self.server.y), 2)
+        for w in self.ws:
+            pygame.draw.line(self.screen, (40, 60, 90), (self.server.x, self.server.y), (w.x, w.y), 1)
         
-        # Draw connections between nodes
-        self._draw_connections()
+        # Sprites
+        for p in self.packets: p.draw_trail(self.screen)
+        self.nodes.draw(self.screen)
+        self.packets.draw(self.screen)
+        if self.powerups: self.powerups.draw(self.screen)
+        if self.boss: self.boss.draw(self.screen)
+        self.particles.draw(self.screen)
         
-        # Draw packet trails
-        for packet in self.packet_sprites:
-            packet.draw_trail(self.screen)
+        # Fingerprint in game area
+        if self.fingerprint: self.fingerprint.draw(self.screen)
         
-        # Draw sprites
-        self.node_sprites.draw(self.screen)
-        self.packet_sprites.draw(self.screen)
+        # Heartbeat in game area
+        if self.heartbeat: self.heartbeat.draw(self.screen)
         
-        # Draw particles
-        self.particle_system.draw(self.screen)
-    
-    def _draw_connections(self):
-        """Draw lines connecting network nodes"""
-        # Router -> Firewall -> Server
-        pygame.draw.line(
-            self.screen, (40, 60, 90),
-            (self.router.x, self.router.y),
-            (self.firewall.x, self.firewall.y), 2
-        )
-        pygame.draw.line(
-            self.screen, (40, 60, 90),
-            (self.firewall.x, self.firewall.y),
-            (self.main_server.x, self.main_server.y), 2
-        )
-        
-        # Server -> Workstations
-        for ws in self.workstations:
-            pygame.draw.line(
-                self.screen, (40, 60, 90),
-                (self.main_server.x, self.main_server.y),
-                (ws.x, ws.y), 1
-            )
-    
-    def _draw_hud(self):
-        """Draw heads-up display"""
-        # Top bar background
-        pygame.draw.rect(
-            self.screen, Theme.PANEL_BG,
-            (0, 0, Config.SCREEN_WIDTH, 50)
-        )
-        pygame.draw.line(
-            self.screen, Theme.NEON_BLUE,
-            (0, 50), (Config.SCREEN_WIDTH, 50), 2
-        )
-        
-        # Title
-        font_title = pygame.font.Font(None, 32)
-        title = font_title.render("PACKET DEFENDER", True, Theme.NEON_BLUE)
-        self.screen.blit(title, (20, 12))
-        
-        # Time
-        font_time = pygame.font.Font(None, 24)
-        minutes = int(self.game_time) // 60
-        seconds = int(self.game_time) % 60
-        time_text = font_time.render(f"TIME: {minutes:02d}:{seconds:02d}", True, Theme.TEXT_PRIMARY)
-        self.screen.blit(time_text, (Config.SCREEN_WIDTH - 130, 15))
-        
-        # Stats summary
-        stats_text = f"PROCESSED: {self.packets_processed}  |  BLOCKED: {self.packets_blocked}"
-        stats_surface = font_time.render(stats_text, True, Theme.TEXT_SECONDARY)
-        stats_x = (Config.SCREEN_WIDTH - stats_surface.get_width()) // 2
-        self.screen.blit(stats_surface, (stats_x, 15))
-    
-    def _draw_control_panel(self):
-        """Draw left control panel"""
-        # Panel background
-        panel_rect = pygame.Rect(
-            Config.CONTROL_PANEL_X, Config.GAME_AREA_Y,
-            Config.CONTROL_PANEL_WIDTH, 350
-        )
-        pygame.draw.rect(self.screen, Theme.PANEL_BG, panel_rect, border_radius=8)
-        pygame.draw.rect(self.screen, Theme.NEON_PURPLE, panel_rect, 2, border_radius=8)
-        
-        # Title
-        font = pygame.font.Font(None, 20)
-        title = font.render("DEFENSE CONTROLS", True, Theme.NEON_PURPLE)
-        self.screen.blit(title, (Config.CONTROL_PANEL_X + 12, Config.GAME_AREA_Y + 10))
-        
-        # Draw defense toggle
-        self.defense_toggle.draw(self.screen)
-        
-        # Draw buttons
-        for button in self.buttons:
-            button.draw(self.screen)
-    
-    def _draw_ui(self):
-        """Draw all UI components"""
         # HUD
-        self._draw_hud()
+        pygame.draw.rect(self.screen, Theme.PANEL_BG, (0, 0, Config.WIDTH, 55))
+        pygame.draw.line(self.screen, Theme.NEON_BLUE, (0, 55), (Config.WIDTH, 55), 2)
+        
+        t = self.fonts['M'].render("PACKET DEFENDER", True, Theme.NEON_BLUE)
+        self.screen.blit(t, (15, 15))
+        
+        if self.waves:
+            wt = self.fonts['S'].render(f"WAVE {self.waves.current_wave}", True, (255, 50, 255) if self.state == State.BOSS else Theme.NEON_PURPLE)
+            self.screen.blit(wt, (200, 18))
+        
+        if self.score:
+            st = self.fonts['S'].render(f"SCORE: {self.score.score}", True, Theme.NEON_GREEN)
+            self.screen.blit(st, (Config.WIDTH//2 - st.get_width()//2, 10))
+            if self.score.combo > 1:
+                ct = self.fonts['S'].render(f"x{self.score.combo}", True, Theme.NEON_YELLOW)
+                self.screen.blit(ct, (Config.WIDTH//2 - ct.get_width()//2, 30))
+        
+        mins, secs = int(self.time) // 60, int(self.time) % 60
+        tt = self.fonts['S'].render(f"{mins:02d}:{secs:02d}", True, Theme.TEXT_PRIMARY)
+        self.screen.blit(tt, (Config.WIDTH - 70, 18))
         
         # Control panel
-        self._draw_control_panel()
+        pygame.draw.rect(self.screen, Theme.PANEL_BG, (Config.CTRL_X, Config.GAME_Y, Config.CTRL_W, 340), border_radius=5)
+        pygame.draw.rect(self.screen, Theme.NEON_PURPLE, (Config.CTRL_X, Config.GAME_Y, Config.CTRL_W, 340), 2, border_radius=5)
+        ct = self.fonts['T'].render("CONTROLS", True, Theme.NEON_PURPLE)
+        self.screen.blit(ct, (Config.CTRL_X + 8, Config.GAME_Y + 5))
         
-        # Health bar
-        self.health_bar.set_value(self.network_health)
-        self.health_bar.update()
-        self.health_bar.draw(self.screen)
+        self.def_toggle.draw(self.screen)
+        for b in self.btns: b.draw(self.screen)
         
-        # Threat indicator
-        self.threat_indicator.set_level(self.threat_level)
-        self.threat_indicator.update()
-        self.threat_indicator.draw(self.screen)
+        # Keys hint
+        kt = self.fonts['T'].render("Q E C SPACE A R", True, Theme.TEXT_SECONDARY)
+        self.screen.blit(kt, (Config.CTRL_X + 8, Config.GAME_Y + 320))
         
-        # Stats panel
-        self.stats_panel.set_stats({
-            "Packets": self.packets_processed,
-            "Blocked": self.packets_blocked,
-            "Active Threats": sum(1 for p in self.packet_sprites if p.packet_type == PacketType.MALICIOUS),
-            "Health": f"{int(self.network_health)}%",
-            "Mode": self.defense_mode
-        })
-        self.stats_panel.draw(self.screen)
+        # UI panels
+        self.hp_bar.set_value(self.hp)
+        self.hp_bar.update()
+        self.hp_bar.draw(self.screen)
         
-        # Log panel
-        self.log_panel.draw(self.screen)
+        self.threat_ind.set_level(self.threat)
+        self.threat_ind.update()
+        self.threat_ind.draw(self.screen)
+        
+        stats = {"Packets": self.pkts, "Blocked": self.blocked, "Threats": sum(1 for p in self.packets if p.packet_type == PacketType.MALICIOUS), "HP": f"{int(self.hp)}%"}
+        if self.score: stats["Score"] = self.score.score
+        if self.waves: stats["Wave"] = self.waves.current_wave
+        if self.boss and self.boss.has_boss(): stats["Boss"] = self.boss.get_boss().health
+        self.stats.set_stats(stats)
+        self.stats.draw(self.screen)
+        
+        self.log.draw(self.screen)
+        
+        # Advanced panels
+        if self.worldmap: self.worldmap.draw(self.screen)
+        if self.graph: self.graph.draw(self.screen)
+        if self.dna: self.dna.draw(self.screen)
+        if self.ai_pred: self.ai_pred.draw(self.screen)
+        if self.hacker_chat: self.hacker_chat.draw(self.screen)
+        if self.news: self.news.draw(self.screen)
+        
+        # Popups
+        if self.popup_ach and self.popup_ach_t > 0:
+            pygame.draw.rect(self.screen, Theme.PANEL_BG, (Config.WIDTH//2 - 120, 70, 240, 45), border_radius=8)
+            pygame.draw.rect(self.screen, Theme.NEON_YELLOW, (Config.WIDTH//2 - 120, 70, 240, 45), 2, border_radius=8)
+            at = self.fonts['T'].render("🏆 ACHIEVEMENT!", True, Theme.NEON_YELLOW)
+            self.screen.blit(at, (Config.WIDTH//2 - at.get_width()//2, 75))
+            nt = self.fonts['T'].render(self.popup_ach.name, True, Theme.TEXT_PRIMARY)
+            self.screen.blit(nt, (Config.WIDTH//2 - nt.get_width()//2, 93))
+        
+        if self.popup_pwr and self.popup_pwr_t > 0:
+            pt = self.fonts['M'].render(f"⚡ {self.popup_pwr}!", True, (0, 255, 255))
+            self.screen.blit(pt, (Config.GAME_X + Config.GAME_W//2 - pt.get_width()//2, Config.GAME_Y + 100))
+        
+        if self.combo_t > 0 and self.combo_v >= 5:
+            ct = self.fonts['L'].render(f"x{self.combo_v}!", True, Theme.NEON_RED if self.combo_v >= 10 else Theme.NEON_YELLOW)
+            self.screen.blit(ct, (Config.GAME_X + Config.GAME_W//2 - ct.get_width()//2, Config.GAME_Y + 150))
+        
+        if self.boss_warn > 0:
+            bt = self.fonts['L'].render("⚠️ BOSS ⚠️", True, (255, 50, 50))
+            self.screen.blit(bt, (Config.GAME_X + Config.GAME_W//2 - bt.get_width()//2, Config.GAME_Y + 200))
+        
+        # Overlays
+        if self.state == State.PAUSE:
+            ov = pygame.Surface((Config.WIDTH, Config.HEIGHT), pygame.SRCALPHA)
+            ov.fill((0, 0, 0, 180))
+            self.screen.blit(ov, (0, 0))
+            pt = self.fonts['L'].render("PAUSED", True, Theme.NEON_YELLOW)
+            self.screen.blit(pt, (Config.WIDTH//2 - pt.get_width()//2, Config.HEIGHT//2))
+        
+        elif self.state == State.OVER:
+            ov = pygame.Surface((Config.WIDTH, Config.HEIGHT), pygame.SRCALPHA)
+            ov.fill((50, 0, 0, 200))
+            self.screen.blit(ov, (0, 0))
+            
+            gt = self.fonts['L'].render("GAME OVER", True, Theme.NEON_RED)
+            self.screen.blit(gt, (Config.WIDTH//2 - gt.get_width()//2, Config.HEIGHT//2 - 80))
+            
+            if self.score:
+                st = self.fonts['M'].render(f"Score: {self.score.score}", True, Theme.NEON_GREEN)
+                self.screen.blit(st, (Config.WIDTH//2 - st.get_width()//2, Config.HEIGHT//2 - 20))
+            
+            info = f"Blocked: {self.blocked}"
+            if self.waves: info += f" | Wave: {self.waves.current_wave}"
+            it = self.fonts['S'].render(info, True, Theme.TEXT_PRIMARY)
+            self.screen.blit(it, (Config.WIDTH//2 - it.get_width()//2, Config.HEIGHT//2 + 20))
+            
+            if self.report and self.report.report_data:
+                g = self.report.report_data.get('grade', '?')
+                grt = self.fonts['L'].render(f"GRADE: {g}", True, Theme.NEON_YELLOW)
+                self.screen.blit(grt, (Config.WIDTH//2 - grt.get_width()//2, Config.HEIGHT//2 + 60))
+            
+            ht = self.fonts['S'].render("R = Restart | ESC = Quit", True, Theme.TEXT_SECONDARY)
+            self.screen.blit(ht, (Config.WIDTH//2 - ht.get_width()//2, Config.HEIGHT//2 + 110))
     
-    def _draw_pause_overlay(self):
-        """Draw pause screen"""
-        overlay = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
-        self.screen.blit(overlay, (0, 0))
+    def _events(self):
+        mpos = pygame.mouse.get_pos()
+        mpressed = pygame.mouse.get_pressed()
+        mclick = False
         
-        font_large = pygame.font.Font(None, 72)
-        font_small = pygame.font.Font(None, 28)
-        
-        text = font_large.render("PAUSED", True, Theme.NEON_YELLOW)
-        text_rect = text.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2))
-        self.screen.blit(text, text_rect)
-        
-        hint = font_small.render("Press SPACE or click PAUSE to resume", True, Theme.TEXT_SECONDARY)
-        hint_rect = hint.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2 + 50))
-        self.screen.blit(hint, hint_rect)
-    
-    def _draw_game_over(self):
-        """Draw game over screen"""
-        overlay = pygame.Surface((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((50, 0, 0, 200))
-        self.screen.blit(overlay, (0, 0))
-        
-        font_large = pygame.font.Font(None, 72)
-        font_small = pygame.font.Font(None, 28)
-        
-        text = font_large.render("NETWORK COMPROMISED", True, Theme.NEON_RED)
-        text_rect = text.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2))
-        self.screen.blit(text, text_rect)
-        
-        stats = font_small.render(
-            f"Packets Processed: {self.packets_processed}  |  Blocked: {self.packets_blocked}",
-            True, Theme.TEXT_PRIMARY
-        )
-        stats_rect = stats.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2 + 50))
-        self.screen.blit(stats, stats_rect)
-        
-        hint = font_small.render("Press R to restart or ESC to quit", True, Theme.TEXT_SECONDARY)
-        hint_rect = hint.get_rect(center=(Config.SCREEN_WIDTH // 2, Config.SCREEN_HEIGHT // 2 + 90))
-        self.screen.blit(hint, hint_rect)
-    
-    # ============================================
-    # INPUT HANDLING
-    # ============================================
-    
-    def _handle_events(self):
-        """Handle all pygame events"""
-        mouse_pos = pygame.mouse.get_pos()
-        mouse_pressed = pygame.mouse.get_pressed()
-        mouse_clicked = False
-        
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
                 self.running = False
-            
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    self.running = False
-                elif event.key == pygame.K_SPACE:
-                    self._action_toggle_pause()
-                elif event.key == pygame.K_r and self.state == GameState.GAME_OVER:
-                    self._restart_game()
-                elif event.key == pygame.K_a:
-                    self.defense_toggle.toggle()
-            
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:
-                    mouse_clicked = True
-                    self._handle_click(mouse_pos)
+            elif e.type == pygame.KEYDOWN:
+                if e.key == pygame.K_ESCAPE: self.running = False
+                elif e.key == pygame.K_SPACE: self._act_pause()
+                elif e.key == pygame.K_r and self.state == State.OVER: self._restart()
+                elif e.key == pygame.K_a: self.def_toggle.toggle()
+                elif e.key == pygame.K_q: self._act_block()
+                elif e.key == pygame.K_e: self._act_heal()
+                elif e.key == pygame.K_c: self._act_clear()
+            elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+                mclick = True
+                self._click(mpos)
         
-        # Update buttons
-        for button in self.buttons:
-            button.update(mouse_pos, mouse_pressed)
-        
-        # Update defense toggle
-        self.defense_toggle.update(mouse_pos, mouse_clicked)
+        for b in self.btns:
+            b.update(mpos, mpressed)
+        self.def_toggle.update(mpos, mclick)
     
-    def _handle_click(self, pos):
-        """Handle mouse click on game area"""
-        # Check if clicked on a packet
-        for packet in self.packet_sprites:
-            if packet.contains_point(pos):
-                if packet.packet_type in [PacketType.SUSPICIOUS, PacketType.MALICIOUS]:
-                    packet.block()
-                    self.packets_blocked += 1
-                    self.particle_system.emit_block_effect(packet.x, packet.y)
-                    self.block_callback(packet.source_ip)
-                    self.log_callback(f"Manually blocked: {packet.source_ip[:15]}", "warning")
+    def _click(self, pos):
+        if self.powerups:
+            p = self.powerups.check_collection(pos)
+            if p: return
+        
+        for p in self.packets:
+            if p.contains_point(pos) and p.packet_type in [PacketType.SUSPICIOUS, PacketType.MALICIOUS]:
+                self._block(p)
                 break
+        
+        if self.boss and self.boss.has_boss():
+            b = self.boss.get_boss()
+            if math.sqrt((pos[0]-b.x)**2 + (pos[1]-b.y)**2) < 50:
+                self.boss.damage_boss(5)
+                self.particles.emit_block_effect(b.x, b.y)
     
-    def _restart_game(self):
-        """Restart the game"""
-        self.network_health = Config.MAX_HEALTH
-        self.packets_processed = 0
-        self.packets_blocked = 0
-        self.threat_level = 0
-        self.game_time = 0
+    def _restart(self):
+        self.hp = Config.MAX_HP
+        self.pkts = self.blocked = 0
+        self.threat = self.time = 0
         self.blocked_ips.clear()
-        self.packet_sprites.empty()
-        self.state = GameState.RUNNING
-        self.log_panel.clear_logs()
-        self.log_callback("Game restarted", "success")
-    
-    # ============================================
-    # MAIN LOOP
-    # ============================================
+        self.packets.empty()
+        self.state = State.RUN
+        self.log.clear_logs()
+        
+        if self.score: self.score.reset()
+        if self.waves: self.waves.start_game()
+        if self.achieve: self.achieve.reset()
+        if self.powerups: self.powerups.clear()
+        if hasattr(self, '_warned'): del self._warned
+        if hasattr(self, '_crit'): del self._crit
+        
+        self._log("Restarted", "success")
+        if self.voice: self.voice.alert_game_start()
     
     def run(self):
-        """Main game loop"""
-        print("[OK] Starting game loop...")
-        self.log_callback("Monitoring network traffic...", "info")
-        
-        try:
-            while self.running:
-                # Calculate delta time
-                dt = self.clock.tick(Config.FPS) / 1000.0
-                
-                # Handle input
-                self._handle_events()
-                
-                # Update game logic
-                self._update_game_logic(dt)
-                
-                # Render
-                self._draw_background()
-                self._draw_game_area()
-                self._draw_ui()
-                
-                # Draw overlays based on state
-                if self.state == GameState.PAUSED:
-                    self._draw_pause_overlay()
-                elif self.state == GameState.GAME_OVER:
-                    self._draw_game_over()
-                
-                # Update display
-                pygame.display.flip()
-                
-        except Exception as e:
-            print(f"[ERROR] Game loop error: {e}")
-            import traceback
-            traceback.print_exc()
-        finally:
-            self._cleanup()
-    
-    def _cleanup(self):
-        """Clean up resources"""
-        print("[OK] Shutting down...")
+        print("[OK] Game running!")
+        while self.running:
+            dt = self.clock.tick(Config.FPS) / 1000
+            self._events()
+            self._update(dt)
+            self._draw()
+            pygame.display.flip()
         pygame.quit()
-    
-    # ============================================
-    # EXTERNAL INTERFACE
-    # ============================================
-    
-    def get_blocked_ips(self):
-        """Return blocked IPs for firewall module"""
-        return self.blocked_ips.copy()
-    
-    def get_stats(self):
-        """Return current game statistics"""
-        return {
-            "health": self.network_health,
-            "packets_processed": self.packets_processed,
-            "packets_blocked": self.packets_blocked,
-            "threat_level": self.threat_level,
-            "defense_mode": self.defense_mode,
-            "game_time": self.game_time,
-            "state": self.state.value
-        }
-    
-    def inject_packet(self, source_ip, packet_type="malicious"):
-        """External method to inject a packet (for testing)"""
-        self._spawn_packet(source_ip=source_ip, packet_type=packet_type)
 
-
-# ============================================
-# ENTRY POINT
-# ============================================
 
 def main():
-    """Main entry point"""
-    print("=" * 50)
-    print("  PACKET DEFENDER - Cyber Defense Simulation")
-    print("=" * 50)
     print()
-    
-    # Create game instance
-    # In production, pass real queue and callbacks:
-    # game = CyberDefenseGame(
-    #     packet_queue=shared_packet_queue,
-    #     log_callback=logger.log,
-    #     block_callback=firewall.block_ip
-    # )
-    
-    game = CyberDefenseGame()
-    game.run()
+    print("=" * 60)
+    print("  PACKET DEFENDER - ULTIMATE EDITION")
+    print("  All Features: Voice | Waves | Boss | AI | Hacker Chat")
+    print("=" * 60)
+    print()
+    Game().run()
 
 
 if __name__ == "__main__":
