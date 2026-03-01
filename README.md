@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/Pygame-2.x-brightgreen?style=for-the-badge&logo=python&logoColor=white" alt="Pygame"/>
   <img src="https://img.shields.io/badge/Scapy-Packet%20Sniffing-blue?style=for-the-badge" alt="Scapy"/>
-  <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-lightgrey?style=for-the-badge" alt="Platform"/>
+  <img src="https://img.shields.io/badge/Platform-Kali%20Linux-557C94?style=for-the-badge&logo=kalilinux&logoColor=white" alt="Platform"/>
   <img src="https://img.shields.io/badge/License-Educational-orange?style=for-the-badge" alt="License"/>
 </p>
 
@@ -121,8 +121,8 @@ Packet Defender/
 | Requirement | Details |
 |---|---|
 | **Python** | 3.10 or higher |
-| **OS** | Linux (Kali preferred for full features), Windows, macOS |
-| **Root Access** | Required only for real packet capture & `iptables` mode |
+| **OS** | Kali Linux (recommended for full features) |
+| **Root Access** | Required for real packet capture & `iptables` rule management |
 
 ### Installation
 
@@ -146,14 +146,12 @@ python main.py
 ```
 Uses generated packets for a safe demo/presentation experience.
 
-#### 🔬 Real Capture Mode
+#### 🔬 Real Capture Mode (Kali Linux)
 Edit `config.py` and set `SIMULATION_MODE = False`, then:
 ```bash
-# Linux
+# Kali Linux (run as root)
 sudo python3 main.py
 
-# Windows (run terminal as Administrator)
-python main.py
 ```
 Captures real network traffic using Scapy and applies real `iptables` rules.
 
